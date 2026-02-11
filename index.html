@@ -36,22 +36,53 @@
     <section id="logged-in-view">
         <div class="container">
             <nav>
-                <button id="sign-out-btn" class="icon-img-btn">
-                    LOG OUT
+                <button id="sign-out-btn" class="icon-btn">
+                    <img src="assets/icons/icon-sign-out.svg" class="icon-img-btn">
                 </button>
             </nav>
+
             <div class="app-container">
                 <div class="user-section">
-                    <img alt="" id="user-profile-picture">
+                    <img id="user-profile-picture">
                     <h2 id="user-greeting"></h2>
                 </div>
 
+                <div class="mood-emojis">
+                    <button id="mood-1" class="mood-emoji-btn">
+                        <img src="assets/emojis/1.png">
+                        Awful
+                    </button>
+                    <button id="mood-2" class="mood-emoji-btn">
+                        <img src="assets/emojis/2.png">
+                        Bad
+                    </button>
+                    <button id="mood-3" class="mood-emoji-btn">
+                        <img src="assets/emojis/3.png">
+                        Meh
+                    </button>
+                    <button id="mood-4" class="mood-emoji-btn">
+                        <img src="assets/emojis/4.png">
+                        Good
+                    </button>
+                    <button id="mood-5" class="mood-emoji-btn">
+                        <img src="assets/emojis/5.png">
+                        Amazing
+                    </button>
+                </div>
+
+                <div class="post-section">
+                    <textarea id="post-input" placeholder="Write down how you're feeling..."></textarea>
+                    <button id="post-btn" class="primary-btn">Post</button>
+
+                </div>
+
+                <div id="posts" class="posts-section">
+                </div>
             </div>
         </div>
     </section>
 
     <script src="index.js" type="module"></script>
-
 </body>
 
 </html>
