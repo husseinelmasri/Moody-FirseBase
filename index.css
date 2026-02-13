@@ -8,6 +8,7 @@
   --light-color: #fffefc;
   --grey-color: #747e79;
   --dark-color: #000000;
+  --white-color: #fffefc;
 
   --primary-font: 'Cabin', sans-serif;
   --seconday-font: 'Calistoga', sans-serif;
@@ -141,6 +142,34 @@ section {
   margin-bottom: 1.8em;
 }
 
+/* == Posts Section - Filters == */
+
+.filters-and-posts-section {
+  margin-top: 1em;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6em;
+}
+
+.filters-section {
+  display: flex;
+  gap: 0.4em;
+}
+
+.filter-btn {
+  color: var(--dark-color);
+  font-size: 0.9em;
+  padding: 0.3em;
+  background-color: transparent;
+}
+
+.selected-filter {
+  color: var(--white-color);
+  background-color: var(--dark-color);
+}
+
+/* == Posts Section - Posts == */
+
 .post {
   display: flex;
   flex-direction: column;
@@ -149,6 +178,8 @@ section {
   border-radius: var(--element-border-radius);
   gap: 0.4em;
 }
+
+/* = Posts Section - Posts - Header = */
 
 .post .header {
   display: flex;
@@ -165,9 +196,39 @@ section {
   height: 2em;
 }
 
+/* = Posts Section - Posts - Body = */
+
 .post p {
   font-size: 0.9em;
   line-height: 1.3em;
+}
+
+/* = Posts Section - Posts - Footer = */
+
+.post .footer {
+  display: flex;
+  align-self: flex-start;
+  gap: 0.4em;
+}
+
+.post .footer button {
+  font-size: 0.9em;
+  padding: 0.2em 0.8em;
+  box-shadow: 0px var(--small-button-height) 0px 0px var(--dark-color);
+  position: relative;
+}
+
+.post .footer button:hover {
+  top: var(--small-button-height);
+  box-shadow: none;
+}
+
+.post .footer .edit-color {
+  background-color: var(--post-color);
+}
+
+.post .footer .delete-color {
+  background-color: var(--delete-color);
 }
 
 /* === Nav === */

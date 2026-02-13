@@ -14,11 +14,14 @@ import {
   collection,
   addDoc,
   doc,
-  setDoc,
+  updateDoc,
+  deleteDoc, // Added missing import for delete
   serverTimestamp,
   query,
   orderBy,
   onSnapshot,
+  where,
+  Timestamp,
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
 /* === Firebase Setup === */
@@ -30,33 +33,46 @@ const firebaseConfig = {
   messagingSenderId: '96335990404',
   appId: '1:96335990404:web:cf1dc878e83802ed007cd1',
 };
+
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
 const db = getFirestore(app);
 
-/* === Golobal Constants === */
-const collectionName = 'posts';
+/* === UI === */
 
 /* == UI - Elements == */
+
 const viewLoggedOut = document.getElementById('logged-out-view');
 const viewLoggedIn = document.getElementById('logged-in-view');
+
 const signInWithGoogleButtonEl = document.getElementById(
   'sign-in-with-google-btn',
 );
+
 const emailInputEl = document.getElementById('email-input');
 const passwordInputEl = document.getElementById('password-input');
+
 const signInButtonEl = document.getElementById('sign-in-btn');
 const createAccountButtonEl = document.getElementById('create-account-btn');
+
 const signOutButtonEl = document.getElementById('sign-out-btn');
+
 const userProfilePictureEl = document.getElementById('user-profile-picture');
 const userGreetingEl = document.getElementById('user-greeting');
+
 const moodEmojiEls = document.getElementsByClassName('mood-emoji-btn');
 const textareaEl = document.getElementById('post-input');
 const postButtonEl = document.getElementById('post-btn');
+
+const allFilterButtonEl = document.getElementById('all-filter-btn');
+
+const filterButtonEls = document.getElementsByClassName('filter-btn');
+
 const postsEl = document.getElementById('posts');
 
 /* == UI - Event Listeners == */
+
 if (signInWithGoogleButtonEl) {
   signInWithGoogleButtonEl.addEventListener('click', authSignInWithGoogle);
 }
@@ -79,20 +95,33 @@ if (moodEmojiEls) {
   }
 }
 
+if (filterButtonEls) {
+  for (let filterButtonEl of filterButtonEls) {
+    filterButtonEl.addEventListener('click', selectFilter);
+  }
+}
+
 if (postButtonEl) {
   postButtonEl.addEventListener('click', postButtonPressed);
 }
 
 /* === State === */
+
 let moodState = 0;
 
+/* === Global Constants === */
+
+const collectionName = 'posts';
+
 /* === Main Code === */
+
 onAuthStateChanged(auth, (user) => {
   if (user) {
     showLoggedInView();
     showProfilePicture(userProfilePictureEl, user);
     showUserGreeting(userGreetingEl, user);
-    fetchInRealtimeAndRenderPostsFromDB();
+    updateFilterButtonStyle(allFilterButtonEl);
+    fetchAllPosts(user);
   } else {
     showLoggedOutView();
   }
@@ -101,6 +130,7 @@ onAuthStateChanged(auth, (user) => {
 /* === Functions === */
 
 /* = Functions - Firebase - Authentication = */
+
 function authSignInWithGoogle() {
   signInWithPopup(auth, provider)
     .then((result) => {
@@ -108,6 +138,7 @@ function authSignInWithGoogle() {
     })
     .catch((error) => {
       console.error(error.message);
+      alert('Failed to sign in with Google: ' + error.message);
     });
 }
 
@@ -115,12 +146,18 @@ function authSignInWithEmail() {
   const email = emailInputEl.value;
   const password = passwordInputEl.value;
 
+  if (!email || !password) {
+    alert('Please enter both email and password');
+    return;
+  }
+
   signInWithEmailAndPassword(auth, email, password)
     .then((userCredential) => {
       clearAuthFields();
     })
     .catch((error) => {
       console.error(error.message);
+      alert('Failed to sign in: ' + error.message);
     });
 }
 
@@ -128,91 +165,269 @@ function authCreateAccountWithEmail() {
   const email = emailInputEl.value;
   const password = passwordInputEl.value;
 
+  if (!email || !password) {
+    alert('Please enter both email and password');
+    return;
+  }
+
   createUserWithEmailAndPassword(auth, email, password)
     .then((userCredential) => {
       clearAuthFields();
     })
     .catch((error) => {
       console.error(error.message);
+      alert('Failed to create account: ' + error.message);
     });
 }
 
 function authSignOut() {
   signOut(auth)
-    .then(() => {})
+    .then(() => {
+      console.log('Signed out');
+    })
     .catch((error) => {
       console.error(error.message);
+      alert('Failed to sign out: ' + error.message);
     });
 }
 
 /* = Functions - Firebase - Cloud Firestore = */
+
 async function addPostToDB(postBody, user) {
   try {
     const docRef = await addDoc(collection(db, collectionName), {
-      // ← Fixed: use variable, not string literal
       body: postBody,
       uid: user.uid,
       createdAt: serverTimestamp(),
       mood: moodState,
     });
     console.log('Document written with ID: ', docRef.id);
+
+    // Clear form after successful post
+    clearInputField(textareaEl);
+    resetAllMoodElements(moodEmojiEls);
+    moodState = 0;
+
     return docRef.id;
   } catch (error) {
     console.error('Error adding post:', error);
+    alert('Failed to post: ' + error.message);
     throw error;
   }
 }
 
-function fetchInRealtimeAndRenderPostsFromDB() {
-  onSnapshot(collection(db, collectionName), (querySnapshot) => {
-    clearAll(postsEl);
-
-    querySnapshot.forEach((doc) => {
-      renderPost(postsEl, doc.data());
-    });
-  });
-}
-
-/* == Functions - UI Functions == */
-function renderPost(postsEl, postData, postId) {
+async function updatePostInDB(docId, newBody) {
   try {
-    // Check if createdAt exists and is a valid Firestore timestamp
-    let dateString = 'Date not available';
-
-    if (postData.createdAt) {
-      try {
-        // Convert Firestore timestamp to Date object
-        const date = postData.createdAt.toDate();
-        dateString = displayDate(date);
-      } catch (dateError) {
-        console.warn('Error parsing date:', dateError);
-        dateString = 'Recent';
-      }
-    }
-
-    // Check if mood exists, default to 0 (neutral) if not
-    const mood = postData.mood || 0;
-
-    // Create the post HTML
-    const postHtml = `
-      <div class="post" id="post-${postId}">
-        <div class="header">
-          <h3>${dateString}</h3>
-          <img src="assets/emojis/${mood}.png" alt="Mood ${mood}" width="30" height="30">
-        </div>
-        <p>${replaceNewLinesWithBrTags(postData.body) || 'No content'}</p>
-      </div>
-    `;
-
-    postsEl.innerHTML += postHtml;
-  } catch (renderError) {
-    console.error('Error rendering post:', renderError);
+    const postRef = doc(db, collectionName, docId);
+    await updateDoc(postRef, {
+      body: newBody,
+    });
+    console.log('Document updated with ID: ', docId);
+  } catch (error) {
+    console.error('Error updating document:', error);
+    alert('Failed to update: ' + error.message);
   }
 }
 
-function replaceNewLinesWithBrTags(inputStrings) {
-  return inputStrings.replace(/\n/g, '<br>');
+async function deletePostFromDB(docId) {
+  try {
+    await deleteDoc(doc(db, collectionName, docId));
+    console.log('Document deleted with ID: ', docId);
+  } catch (error) {
+    console.error('Error deleting document:', error);
+    alert('Failed to delete: ' + error.message);
+  }
 }
+
+function fetchInRealtimeAndRenderPostsFromDB(query) {
+  onSnapshot(
+    query,
+    (querySnapshot) => {
+      clearAll(postsEl);
+
+      querySnapshot.forEach((doc) => {
+        renderPost(postsEl, doc);
+      });
+    },
+    (error) => {
+      console.error('Error fetching posts:', error);
+    },
+  );
+}
+
+function fetchTodayPosts(user) {
+  const now = new Date();
+  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const endOfDay = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+    23,
+    59,
+    59,
+    999,
+  );
+
+  const postsRef = collection(db, collectionName);
+
+  const q = query(
+    postsRef,
+    where('uid', '==', user.uid),
+    where('createdAt', '>=', Timestamp.fromDate(startOfDay)),
+    where('createdAt', '<=', Timestamp.fromDate(endOfDay)),
+    orderBy('createdAt', 'desc'),
+  );
+
+  fetchInRealtimeAndRenderPostsFromDB(q);
+}
+
+function fetchWeekPosts(user) {
+  const now = new Date();
+  const startOfWeek = new Date(now);
+
+  // Get Monday of current week
+  const day = startOfWeek.getDay();
+  const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1);
+  startOfWeek.setDate(diff);
+  startOfWeek.setHours(0, 0, 0, 0);
+
+  const endOfDay = new Date(now);
+  endOfDay.setHours(23, 59, 59, 999);
+
+  const postsRef = collection(db, collectionName);
+
+  const q = query(
+    postsRef,
+    where('uid', '==', user.uid),
+    where('createdAt', '>=', Timestamp.fromDate(startOfWeek)),
+    where('createdAt', '<=', Timestamp.fromDate(endOfDay)),
+    orderBy('createdAt', 'desc'),
+  );
+
+  fetchInRealtimeAndRenderPostsFromDB(q);
+}
+
+function fetchMonthPosts(user) {
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  startOfMonth.setHours(0, 0, 0, 0);
+
+  const endOfDay = new Date(now);
+  endOfDay.setHours(23, 59, 59, 999);
+
+  const postsRef = collection(db, collectionName);
+
+  const q = query(
+    postsRef,
+    where('uid', '==', user.uid),
+    where('createdAt', '>=', Timestamp.fromDate(startOfMonth)),
+    where('createdAt', '<=', Timestamp.fromDate(endOfDay)),
+    orderBy('createdAt', 'desc'),
+  );
+
+  fetchInRealtimeAndRenderPostsFromDB(q);
+}
+
+function fetchAllPosts(user) {
+  const postsRef = collection(db, collectionName);
+
+  const q = query(
+    postsRef,
+    where('uid', '==', user.uid),
+    orderBy('createdAt', 'desc'),
+  );
+
+  fetchInRealtimeAndRenderPostsFromDB(q);
+}
+
+/* == Functions - UI Functions == */
+
+function createPostHeader(postData) {
+  const headerDiv = document.createElement('div');
+  headerDiv.className = 'header';
+
+  const headerDate = document.createElement('h3');
+  headerDate.textContent = displayDate(postData.createdAt);
+  headerDiv.appendChild(headerDate);
+
+  const moodImage = document.createElement('img');
+  moodImage.src = `assets/emojis/${postData.mood || 0}.png`;
+  moodImage.alt = `Mood ${postData.mood || 0}`;
+  moodImage.width = 30;
+  moodImage.height = 30;
+  headerDiv.appendChild(moodImage);
+
+  return headerDiv;
+}
+
+function createPostBody(postData) {
+  const postBody = document.createElement('p');
+  postBody.innerHTML = replaceNewlinesWithBrTags(postData.body || 'No content');
+
+  return postBody;
+}
+
+function createPostUpdateButton(wholeDoc) {
+  const postId = wholeDoc.id;
+  const postData = wholeDoc.data();
+
+  const button = document.createElement('button');
+  button.textContent = 'Edit';
+  button.classList.add('edit-color');
+  button.addEventListener('click', function () {
+    const newBody = prompt('Edit the post', postData.body);
+
+    if (newBody && newBody.trim() !== '') {
+      updatePostInDB(postId, newBody.trim());
+    }
+  });
+
+  return button;
+}
+
+function createPostDeleteButton(wholeDoc) {
+  const postId = wholeDoc.id;
+
+  const button = document.createElement('button');
+  button.textContent = 'Delete';
+  button.classList.add('delete-color');
+  button.addEventListener('click', function () {
+    if (confirm('Are you sure you want to delete this post?')) {
+      deletePostFromDB(postId);
+    }
+  });
+  return button;
+}
+
+function createPostFooter(wholeDoc) {
+  const footerDiv = document.createElement('div');
+  footerDiv.className = 'footer';
+
+  footerDiv.appendChild(createPostUpdateButton(wholeDoc));
+  footerDiv.appendChild(createPostDeleteButton(wholeDoc));
+
+  return footerDiv;
+}
+
+function renderPost(postsEl, wholeDoc) {
+  const postData = wholeDoc.data();
+
+  const postDiv = document.createElement('div');
+  postDiv.className = 'post';
+  postDiv.id = `post-${wholeDoc.id}`;
+
+  postDiv.appendChild(createPostHeader(postData));
+  postDiv.appendChild(createPostBody(postData));
+  postDiv.appendChild(createPostFooter(wholeDoc));
+
+  postsEl.appendChild(postDiv);
+}
+
+function replaceNewlinesWithBrTags(inputString) {
+  if (!inputString) return '';
+  return inputString.replace(/\n/g, '<br>');
+}
+
 function postButtonPressed() {
   const postBody = textareaEl.value;
   const user = auth.currentUser;
@@ -232,30 +447,7 @@ function postButtonPressed() {
     return;
   }
 
-  // Disable button during posting
-  const originalText = postButtonEl.textContent;
-  postButtonEl.disabled = true;
-  postButtonEl.textContent = 'Posting...';
-
-  addPostToDB(postBody.trim(), user)
-    .then((postId) => {
-      console.log('Post added successfully:', postId);
-      clearInputField(textareaEl);
-      resetAllMoodElements(moodEmojiEls);
-      moodState = 0;
-
-      // Optional: Auto-fetch posts after posting
-      // fetchOnceAndRenderPostsFromDB();
-    })
-    .catch((error) => {
-      console.error('Failed to post:', error);
-      alert('Failed to post: ' + error.message);
-    })
-    .finally(() => {
-      // Re-enable button
-      postButtonEl.disabled = false;
-      postButtonEl.textContent = originalText;
-    });
+  addPostToDB(postBody.trim(), user);
 }
 
 function clearAll(element) {
@@ -322,8 +514,14 @@ function showUserGreeting(element, user) {
   }
 }
 
-function displayDate(date) {
+function displayDate(firebaseDate) {
+  if (!firebaseDate) {
+    return 'Date processing';
+  }
+
   try {
+    const date = firebaseDate.toDate();
+
     const day = date.getDate();
     const year = date.getFullYear();
 
@@ -356,6 +554,7 @@ function displayDate(date) {
 }
 
 /* = Functions - UI Functions - Mood = */
+
 function selectMood(event) {
   const selectedMoodEmojiElementId = event.currentTarget.id;
 
@@ -394,4 +593,47 @@ function resetAllMoodElements(allMoodElements) {
 
 function returnMoodValueFromElementId(elementId) {
   return Number(elementId.slice(5));
+}
+
+/* == Functions - UI Functions - Date Filters == */
+
+function resetAllFilterButtons(allFilterButtons) {
+  for (let filterButtonEl of allFilterButtons) {
+    filterButtonEl.classList.remove('selected-filter');
+  }
+}
+
+function updateFilterButtonStyle(element) {
+  if (element) {
+    element.classList.add('selected-filter');
+  }
+}
+
+function fetchPostsFromPeriod(period, user) {
+  if (!user) return;
+
+  if (period === 'today') {
+    fetchTodayPosts(user);
+  } else if (period === 'week') {
+    fetchWeekPosts(user);
+  } else if (period === 'month') {
+    fetchMonthPosts(user);
+  } else {
+    fetchAllPosts(user);
+  }
+}
+
+function selectFilter(event) {
+  const user = auth.currentUser;
+  if (!user) return;
+
+  const selectedFilterElementId = event.target.id;
+  const selectedFilterPeriod = selectedFilterElementId.split('-')[0];
+  const selectedFilterElement = document.getElementById(
+    selectedFilterElementId,
+  );
+
+  resetAllFilterButtons(filterButtonEls);
+  updateFilterButtonStyle(selectedFilterElement);
+  fetchPostsFromPeriod(selectedFilterPeriod, user);
 }
