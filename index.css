@@ -403,5 +403,5 @@ button:hover {
 
 #logged-in-view {
   display: none;
-  margin: 0;
+  margin: 0.1px;
 }
